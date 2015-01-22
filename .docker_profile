@@ -1,0 +1,163 @@
+# ~/.docker-profile.bash
+
+export DOCKER_HOST=tcp://192.168.59.103:2376
+export DOCKER_CERT_PATH=/Users/corey.white/.boot2docker/certs/boot2docker-vm
+export DOCKER_TLS_VERIFY=1
+docker-enter() {
+  boot2docker ssh '[ -f /var/lib/boot2docker/nsenter ] || docker run --rm -v /var/lib/boot2docker/:/target jpetazzo/nsenter'
+  boot2docker ssh -t sudo /var/lib/boot2docker/docker-enter "$@"
+}
+alias de='docker-enter'
+listening() {
+  sudo lsof -i -n -P | grep TCP
+}
+
+dls() {
+  docker ps -a
+}
+drun() {
+  if [[ $# -eq 0 ]]
+    then
+    echo "Which container? Provide 1 argument."
+    return 0
+  fi
+  case "$1" in
+    'sk' | 'sheknows' )
+    docker run -d \
+    -P --name sk \
+    --env APP=sk \
+    --env SK_ENVIRONMENT=local \
+    --link db:db \
+    --link es:es \
+    -p 6379:6379 \
+    -p 8080:80 \
+    -v /Users/corey.white/Sites/sheknows:/src \
+    -t docker.dev.sheknows.us:5000/sheknows \
+    /opt/run/start.sh
+    ;;
+    'admin' | 'cms' )
+    docker run -d \
+    -P --name cms \
+    --env APP=cms \
+    --env SK_ENVIRONMENT=local \
+    --link db:db \
+    --link es:es \
+    -p 8081:80 \
+    -v \
+    /Users/corey.white/Sites/cms:/src \
+    -t docker.dev.sheknows.us:5000/kitchen-sink \
+    /opt/run/start.sh
+    ;;
+    'cn' | 'connect' )
+    docker run -d \
+    -P --name cn \
+    --env APP=cn \
+    --env SK_ENVIRONMENT=local \
+    --link es:es \
+    -p 8082:8082 \
+    -p 9002:9002 \
+    -v \
+    /Users/corey.white/Sites/connect:/src \
+    -t docker.dev.sheknows.us:5000/connect \
+    /opt/run/start.sh
+    ;;
+    'es' | 'elasticsearch' )
+    docker run -d \
+    -P --name es \
+    --env APP=es \
+    -p 9200:9200 -p 9300:9300 \
+    -v /Users/corey.white/Sites/cms-api-data:/data dockerfile/elasticsearch \
+    /elasticsearch/bin/elasticsearch \
+    -Des.config=/elasticsearch/config/elasticsearch.yml
+    ;;
+    'db' | 'mysql' )
+    docker run -d \
+    -P --name db \
+    -e MYSQL_ROOT_PASSWORD=D0ck3Rr00tPa55 \
+    -e MYSQL_USER=sheknows_w \
+    -e MYSQL_PASSWORD=88ey2phaphEspech \
+    -v /Users/corey.white/Sites/sheknows.db:/src \
+    mysql
+    ;;
+
+    * )
+    echo "Container not recognized"
+    ;;
+  esac
+}
+# docker stop
+dsto() {
+  if [[ $# -eq 0 ]]
+    then
+    echo "Which container? Provide 1 argument."
+    return 0
+  fi
+  docker stop $1
+}
+# boot2docker up and start containers
+bup() {
+  boot2docker up
+  echo "boot2docker status: "
+  boot2docker status
+  echo
+  echo "Starting up containers"
+  echo
+  dstart
+}
+# stop all running containers and shut down boot2docker
+bdown() {
+  echo 'Shutting down running containers'
+  dsar
+  echo 'Shutting down boot2docker'
+  bd stop
+  echo 'boot2docker powered off'
+}
+# docker start all containers
+dstart() {
+  #docker ps | tail -n +2 |cut -d ' ' -f 1 | xargs docker start
+  docker start db;
+  docker start es;
+  docker start cms;
+  docker start sk;
+  docker start cn;
+}
+# docker start
+dsta() {
+  if [[ $# -eq 0 ]]
+    then
+    echo "Which container? Provide 1 argument."
+    return 0
+  fi
+  docker start $1
+}
+# docker remove
+drm() {
+  if [[ $# -eq 0 ]]
+    then
+    echo "Which container? Provide 1 argument."
+    return 0
+  fi
+  docker rm $1
+}
+# docker stop all running
+dstop() {
+  docker ps | tail -n +2 |cut -d ' ' -f 1 | xargs docker stop
+}
+# docker remove all stopped
+dras() {
+  docker ps -a | tail -n +2 | grep Exited | cut -d ' ' -f 1 | xargs docker rm
+}
+# docker kill all
+dka() {
+  dsar
+  dras
+}
+# Docker get an ext ip
+dip() {
+  if [[ $# -eq 0 ]]
+    then
+    echo "Which container? Provide 1 argument."
+    return 0
+  fi
+  docker inspect --format='{{.NetworkSettings.IPAddress}}' $1
+}
